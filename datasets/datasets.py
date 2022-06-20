@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, Subset
 
 
 class CityscapesDataset(Dataset):
-    def __init__(self, root=r'/path/to/cityscapes',
+    def __init__(self, root=r'/media/Data/Datasets/Cityscapes',
                        list_path='./datasets/city_list/train.txt',
                        max_iters=None, transforms=None):
         self.root = root

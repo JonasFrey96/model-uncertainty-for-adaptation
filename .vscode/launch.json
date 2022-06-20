@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MUFA",
+            "type": "python",
+            "request": "launch",
+            "program": "/home/jonfrey/git/model-uncertainty-for-adaptation/do_segm.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "pythonPath": "/home/jonfrey/miniconda3/envs/stego/bin/python3",
+            "cwd": "/home/jonfrey/git/model-uncertainty-for-adaptation",
+            "args":[
+                "--city=Rome",
+                "--no-src-data",
+                "--freeze-classifier", 
+                "--unc-noise", 
+                "--lambda-ce=1", 
+                "--lambda-ent=1",
+                "--save=/home/jonfrey/git/model-uncertainty-for-adaptation/results",
+                "--lambda-ssl=0.1"
+
+
+            ]
+        },
+    ]
+}

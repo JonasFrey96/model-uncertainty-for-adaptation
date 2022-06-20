@@ -9,7 +9,7 @@
 import argparse
 
 
-DATA_TGT_DIRECTORY = '/path/to/cross/city/folder'
+DATA_TGT_DIRECTORY = '/media/Data/Datasets/NTHU_Datasets'
 DATA_TGT_TRAIN_LIST_PATH = './datasets/NTHU_list/{}/train.txt'
 DATA_TGT_TEST_LIST_PATH = './datasets/NTHU_list/{}/test.txt'
 ### train ###
@@ -116,7 +116,6 @@ def get_arguments():
 
     
     # DATA_SRC_LIST_PATH = './dataset/list/gta5/train_small.lst'
-
     RESTORE_FROM = './pretrained/Cityscapes_source_class13.pth'
     NUM_CLASSES = 13
     INIT_SRC_PORT = 1
