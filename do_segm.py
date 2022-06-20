@@ -19,13 +19,18 @@ from torch.utils.data import DataLoader
 
 from datasets import (CityscapesDataset, CrossCityDataset, get_test_transforms,
                       get_train_transforms)
+
+from datasets import ScanNet  # create new dataset
+from torchvision import transforms
 from generate_pseudo_labels import validate_model
 from network import DeeplabMulti as DeepLab
 from network import JointSegAuxDecoderModel, NoisyDecoders
+from network.models import FastSCNNJointSegAuxDecoderModel, FastSCNNNoisyDecoders, FastSCNN
 from utils import (ScoreUpdater, adjust_learning_rate, cleanup,
                    get_arguments, label_selection, parse_split_list,
                    savelst_tgt, seed_torch, self_training_regularized_infomax,
                    self_training_regularized_infomax_cct, set_logger)
+from utils import SemanticsMeter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 osp = os.path
@@ -38,34 +43,92 @@ logger = set_logger(args.save, 'training_logger', False)
 
 
 def make_network(args):
-    model = DeepLab(13, False)
-    model = torch.nn.DataParallel(model)
-    sd = torch.load('pretrained/Cityscapes_source_class13.pth', map_location=device)['state_dict']
-    model.load_state_dict(sd)
+    # model = DeepLab(13, False)
+    # model = torch.nn.DataParallel(model)
+    # sd = torch.load('pretrained/Cityscapes_source_class13.pth', map_location=device)['state_dict']
+    # model.load_state_dict(sd)
 
-    model = model.module
-    if args.unc_noise:
-        aux_decoders = NoisyDecoders(args.decoders, args.dropout)
-        model = JointSegAuxDecoderModel(model, aux_decoders)
+    # model = model.module
+    # if args.unc_noise:
+    #     aux_decoders = NoisyDecoders(args.decoders, args.dropout)
+    #     model = JointSegAuxDecoderModel(model, aux_decoders)
+        
+    fastscnn = FastSCNN(num_classes=40, extract=True, extract_layer="fusion")
+    p = "/home/jonfrey/git/model-uncertainty-for-adaptation/debug/pretrained.pt"
+    sd = torch.load(p)
+    sd = {k[6:]:v for (k,v) in sd.items() if k.find("teacher") == -1}
+    sd.pop("bins"), sd.pop("valid")
+    fastscnn.load_state_dict(sd)
+    fastscnn.extract = True
+    
+    aux_decoders = FastSCNNNoisyDecoders(n_decoders=args.decoders, dropout=args.dropout, num_classes=40)
+    model = FastSCNNJointSegAuxDecoderModel(fastscnn, aux_decoders)
+    
     return model
 
 
 def test(model, round_idx):
-    transforms = get_test_transforms()
-    
-    ds = CrossCityDataset(root=args.data_tgt_dir, list_path=args.data_tgt_test_list.format(args.city), transforms=transforms)
-    loader = torch.utils.data.DataLoader(ds, batch_size=6, pin_memory=torch.cuda.is_available(), num_workers=6)
+    output_transform = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    # ds = CrossCityDataset(root=args.data_tgt_dir, list_path=args.data_tgt_test_list.format(args.city), transforms=transforms)
+    f = lambda x: int( x.split("/")[-3][5:9])* 10000000 + int( x.split("/")[-3][10:12])* 10000 + int( x.split("/")[-1].split(".")[0])
 
-    scorer = ScoreUpdater(13, len(loader))
+
+    ds = ScanNet(
+            root="/home/jonfrey/Datasets/scannet",
+            mode="val",
+            scenes=["scene0001"],
+            output_trafo=output_transform,
+            output_size=(320, 640),
+            degrees=0,
+            data_augmentation=False,
+            flip_p=0,
+            jitter_bcsh=[0, 0, 0, 0]
+    )
+    ls = [ds.label_pths[i] for  i in ds.global_to_local_idx]
+    ls.sort(key=f)
+    
+    print(ls[0], ls[-1], len(ls))
+    
+    ds = ScanNet(
+        root="/home/jonfrey/Datasets/scannet",
+        mode="train",
+        scenes=["scene0001"],
+        output_trafo=output_transform,
+        output_size=(320, 640),
+        degrees=0,
+        data_augmentation=False,
+        flip_p=0,
+        jitter_bcsh=[0, 0, 0, 0]
+    )
+    
+    ls = [ds.label_pths[i] for  i in ds.global_to_local_idx]
+    ls.sort(key=f)
+    print(ls[0], ls[-1], len(ls))
+        
+    images = [ds.image_pths[n] for n in ds.global_to_local_idx]
+
+    from ucdr.pseudo_label.fast_scnn import FastDataset
+    ds = FastDataset(images)
+    
+    loader = torch.utils.data.DataLoader(ds, batch_size=1, pin_memory=torch.cuda.is_available(), num_workers=6)
+    sm = SemanticsMeter(40)
+    
+    scorer = ScoreUpdater(40, len(loader))
     logger.info('###### Start evaluating in target domain test set in round {}! ######'.format(round_idx))
     start_eval = time.time()
     model.eval()
     with torch.no_grad():
         for batch in loader:
             img, label, _ = batch
-            pred = model(img.to(device)).argmax(1).cpu()
+            pred = model(img.to(device), training=False).argmax(1).cpu()
+            
+            sm.update(pred,label)
             scorer.update(pred.view(-1), label.view(-1))
     model.train()
+    
+    print( sm.measure() )
+    mIoU = scorer.scores()
+    
     logger.info('###### Finish evaluating in target domain test set in round {}! Time cost: {:.2f} seconds. ######'.format(
         round_idx, time.time()-start_eval))
 
@@ -88,7 +151,7 @@ def train(mix_trainloader, model, interp, optimizer, args):
             loss = self_training_regularized_infomax_cct(pred, labels.to(device), noise_pred, args)
         else:
             pred = model(images.to(device))
-            loss = F.cross_entropy(pred, labels.to(device), ignore_index=255)
+            loss = F.cross_entropy(pred, labels.to(device), ignore_index=-1)
 
         loss.backward()
         optimizer.step()
@@ -116,10 +179,12 @@ def main():
         os.makedirs(save_lst_path)
 
     tgt_portion = args.init_tgt_port
-    image_tgt_list, image_name_tgt_list, _, _ = parse_split_list(args.data_tgt_train_list.format(args.city))
+    #JONAS image_tgt_list, image_name_tgt_list, _, _ = parse_split_list(args.data_tgt_train_list.format(args.city))
 
     model = make_network(args).to(device)
+    
     test(model, -1)
+    
     for round_idx in range(args.num_rounds):
         save_round_eval_path = osp.join(args.save, str(round_idx))
         save_pseudo_label_color_path = osp.join(
@@ -140,17 +205,45 @@ def main():
                                         save_pseudo_label_path, save_pseudo_label_color_path, save_round_eval_path, args)
 
         tgt_portion = min(tgt_portion + args.tgt_port_step, args.max_tgt_port)
-        tgt_train_lst = savelst_tgt(image_tgt_list, image_name_tgt_list, save_lst_path, save_pseudo_label_path)
+        #JONAS tgt_train_lst = savelst_tgt(image_tgt_list, image_name_tgt_list, save_lst_path, save_pseudo_label_path)
 
         rare_id = np.load(save_stats_path + '/rare_id_round' + str(round_idx) + '.npy')
         mine_id = np.load(save_stats_path + '/mine_id_round' + str(round_idx) + '.npy')
         # mine_chance = args.mine_chance
 
-        src_transforms, tgt_transforms = get_train_transforms(args, mine_id)
-        srcds = CityscapesDataset(transforms=src_transforms)
-
-        tgtds = CrossCityDataset(args.data_tgt_dir.format(args.city), tgt_train_lst,
-                                  pseudo_root=save_pseudo_label_path, transforms=tgt_transforms)
+        src_transforms = output_transform = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        tgt_transforms = src_transforms
+        
+        
+        srcds = ScanNet(
+            root="/home/jonfrey/Datasets/scannet",
+            mode="train_25k",
+            scenes=[],
+            output_trafo=output_transform,
+            output_size=(320, 640),
+            degrees=10,
+            data_augmentation=True,
+            flip_p=0.5,
+            jitter_bcsh=[0.3, 0.3, 0.3, 0.05]
+        )
+              
+        tgtds = ScanNet(
+            root="/home/jonfrey/Datasets/scannet",
+            mode="train",
+            scenes=["scene0000"],
+            output_trafo=output_transform,
+            output_size=(320, 640),
+            degrees=10,
+            data_augmentation=True,
+            flip_p=0.5,
+            jitter_bcsh=[0.3, 0.3, 0.3, 0.05]
+        )
+                  
+        # srcds = CityscapesDataset(transforms=src_transforms)
+        #src_transforms, tgt_transforms = get_train_transforms(args, mine_id)
+        # tgtds = CityscapesDataset(transforms=tgt_transforms)
+        # tgtds = CrossCityDataset(args.data_tgt_dir.format(args.city), tgt_train_lst,
+        #                           pseudo_root=save_pseudo_label_path, transforms=tgt_transforms)
         
         if args.no_src_data:
             mixtrainset = tgtds

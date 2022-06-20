@@ -14,9 +14,13 @@ from torch.utils.data import Dataset, Subset
 
 
 class CityscapesDataset(Dataset):
-    def __init__(self, root=r'/path/to/cityscapes',
-                       list_path='./datasets/city_list/train.txt',
-                       max_iters=None, transforms=None):
+    def __init__(
+        self,
+        root=r"/home/jonfrey/Datasets/cityscapes/",
+        list_path="./datasets/city_list/train.txt",
+        max_iters=None,
+        transforms=None,
+    ):
         self.root = root
         self.list_path = list_path
         self.transforms = transforms
@@ -25,7 +29,7 @@ class CityscapesDataset(Dataset):
         self.label_ids = []
         with open(list_path) as f:
             for item in f:
-                fields = item.strip().split('\t')
+                fields = item.strip().split("\t")
                 self.img_ids.append(fields[0])
                 self.label_ids.append(fields[1])
 
@@ -42,12 +46,7 @@ class CityscapesDataset(Dataset):
 
             label_file = osp.join(self.root, label_name)
 
-            self.files.append({
-                "img": img_file,
-                "label": label_file,
-                "img_name": img_name,
-                "label_name": label_name
-            })
+            self.files.append({"img": img_file, "label": label_file, "img_name": img_name, "label_name": label_name})
 
     def __len__(self):
         return len(self.files)
@@ -55,8 +54,8 @@ class CityscapesDataset(Dataset):
     def __getitem__(self, index):
         datafile = self.files[index]
 
-        image = Image.open(datafile['img']).convert('RGB')
-        label = Image.open(datafile['label']).convert('L')
+        image = Image.open(datafile["img"]).convert("RGB")
+        label = Image.open(datafile["label"]).convert("L")
 
         image, label = self.transforms((image, label))
 
@@ -82,7 +81,7 @@ class CrossCityDataset(Dataset):
         self.label_ids = []
         with open(list_path) as f:
             for item in f:
-                fields = item.strip().split('\t')
+                fields = item.strip().split("\t")
                 self.img_ids.append(fields[0])
                 self.label_ids.append(fields[1])
 
@@ -101,12 +100,7 @@ class CrossCityDataset(Dataset):
                 label_file = osp.join(self.root, label_name)
             else:
                 label_file = label_name
-            self.files.append({
-                "img": img_file,
-                "label": label_file,
-                "img_name": img_name,
-                "label_name": label_name
-            })
+            self.files.append({"img": img_file, "label": label_file, "img_name": img_name, "label_name": label_name})
 
     def __len__(self):
         return len(self.files)
@@ -114,7 +108,7 @@ class CrossCityDataset(Dataset):
     def __getitem__(self, index):
         datafile = self.files[index]
 
-        image = Image.open(datafile['img']).convert('RGB')
-        label = Image.open(datafile['label'])  # .convert('L')
+        image = Image.open(datafile["img"]).convert("RGB")
+        label = Image.open(datafile["label"])  # .convert('L')
         image, label = self.transforms((image, label))
         return image, label, datafile["img_name"]

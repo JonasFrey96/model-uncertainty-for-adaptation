@@ -26,7 +26,6 @@ class DropOutDecoder(nn.Module):
         x = self.upsample(self.dropout(x))
         return x
 
-
 class JointSegAuxDecoderModel(nn.Module):
     def __init__(self, seg_model, auxmodule):
         super().__init__()

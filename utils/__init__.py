@@ -15,3 +15,4 @@ from .loss import (self_training_regularized_infomax,
                    self_training_regularized_infomax_cct)
 from .lr_utils import adjust_learning_rate
 from .viz_utils import colorize_mask
+from .semantics_meter import SemanticsMeter

@@ -14,12 +14,11 @@ import torch
 import torch.nn as nn
 from PIL import Image
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from datasets import CrossCityDataset, get_val_transforms
 from utils import ScoreUpdater, colorize_mask
-
-
+from datasets import get_val_transforms, ScanNet
+from torchvision import transforms
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 osp = os.path
 
@@ -28,10 +27,30 @@ def validate_model(model, save_round_eval_path, round_idx, args):
     logger = logging.getLogger('crosscityadap')
     ## Doubles as a pseudo label generator
 
-    val_transforms = get_val_transforms(args)
-    dataset = CrossCityDataset(args.data_tgt_dir,
-                               args.data_tgt_train_list.format(args.city), transforms=val_transforms)
-    loader = DataLoader(dataset, batch_size=12, num_workers=4, pin_memory=torch.cuda.is_available())
+
+    output_transform = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    # ds = CrossCityDataset(root=args.data_tgt_dir, list_path=args.data_tgt_test_list.format(args.city), transforms=transforms)
+    ds = ScanNet(
+            root="/home/jonfrey/Datasets/scannet",
+            mode="train",
+            scenes=["scene0000"],
+            output_trafo=output_transform,
+            output_size=(320, 640),
+            degrees=10,
+            data_augmentation=True,
+            flip_p=0.5,
+            jitter_bcsh=[0.3, 0.3, 0.3, 0.05]
+        )
+    loader = torch.utils.data.DataLoader(ds, batch_size=6, pin_memory=torch.cuda.is_available(), num_workers=6)
+    
+    
+    # val_transforms = get_val_transforms(args)
+    # dataset = CrossCityDataset(args.data_tgt_dir,
+    #                            args.data_tgt_train_list.format(args.city), transforms=val_transforms)
+    # loader = DataLoader(dataset, batch_size=12, num_workers=4, pin_memory=torch.cuda.is_available())
+    
+    
+    
 
     scorer = ScoreUpdater(args.num_classes, len(loader))
 
@@ -52,7 +71,7 @@ def validate_model(model, save_round_eval_path, round_idx, args):
     start_eval = time.time()
     model.eval()
     with torch.no_grad():
-        for batch in tqdm(loader):
+        for batch in loader:
             image, label, name = batch
 
             image = image.to(device)
@@ -66,8 +85,9 @@ def validate_model(model, save_round_eval_path, round_idx, args):
             # scorer.update(pred_labels.view(-1), label.view(-1))
 
             for b_ind in range(image.size(0)):
-                image_name = name[b_ind].split('/')[-1].split('.')[0]
-
+                t = name[b_ind].split('/')
+                image_name = t[-3] + "_" + (t[-1].split('.')[0])
+                
                 np.save('%s/%s.npy' % (save_prob_path, image_name), output[b_ind].numpy().transpose(1, 2, 0))
                 if args.debug:
                     colorize_mask(pred_labels[b_ind].numpy().astype(np.uint8)).save(

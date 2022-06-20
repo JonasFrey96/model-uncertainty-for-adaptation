@@ -84,7 +84,7 @@ def label_selection(cls_thresh, round_idx, save_prob_path, save_pred_path, save_
 
             weighted_conf = weighted_prob.max(axis=2)
             pred_label_labelIDs = weighted_prob_ids
-            pred_label_labelIDs[weighted_conf < 1] = 255  # '255' in cityscapes indicates 'unlabaled' for trainIDs
+            pred_label_labelIDs[weighted_conf < 1] = -1  # '255' in cityscapes indicates 'unlabaled' for trainIDs
 
         # save colored pseudo-label map
         if args.debug:

@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 
 # from . import IGNORE_LABEL
-IGNORE_LABEL = 255
+IGNORE_LABEL = -1
 
 
 def loss_calc(pred, label):
@@ -77,7 +77,7 @@ def self_training_regularized_infomax_rotation_pred(pred, pseudo_label, ssl_pred
 
 
 class SelfTrainingCrossEntropy(torch.nn.Module):
-    def __init__(self, threshold=0.90, ignore_index=255):
+    def __init__(self, threshold=0.90, ignore_index=-1):
         super().__init__()
         self.threshold = threshold
         self.ignore_index = ignore_index

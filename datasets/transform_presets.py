@@ -12,26 +12,28 @@ from . import transforms
 
 
 def label_mapper():
-    mapper =  {7: 0,
-            8: 1,
-            11: 2,
-            12: 255,
-            13: 255,
-            17: 255,
-            19: 3,
-            20: 4,
-            21: 5,
-            22: 255,
-            23: 6,
-            24: 7,
-            25: 8,
-            26: 9,
-            27: 255,
-            28: 10,
-            31: 255,
-            32: 11,
-            33: 12}
-    arr = 255 * np.ones((255, ))
+    mapper = {
+        7: 0,
+        8: 1,
+        11: 2,
+        12: 255,
+        13: 255,
+        17: 255,
+        19: 3,
+        20: 4,
+        21: 5,
+        22: 255,
+        23: 6,
+        24: 7,
+        25: 8,
+        26: 9,
+        27: 255,
+        28: 10,
+        31: 255,
+        32: 11,
+        33: 12,
+    }
+    arr = 255 * np.ones((255,))
     for x in mapper:
         arr[x] = mapper[x]
     return arr
@@ -44,13 +46,12 @@ def get_train_transforms(args, mine_id):
         transforms.RandomHorizontalFlip(0.5),
         transforms.RandomScaleCrop(args.base_size, args.input_size, args.train_scale_src, [], 0.0),
         transforms.DefaultTransforms(),
-        transforms.RemapLabels(label_to_id)
+        transforms.RemapLabels(label_to_id),
     ]
 
     train_tgt_transforms = [
         transforms.RandomHorizontalFlip(0.5),
-        transforms.RandomScaleCrop(args.base_size, args.input_size,
-                                       args.train_scale_tgt, [], []),
+        transforms.RandomScaleCrop(args.base_size, args.input_size, args.train_scale_tgt, [], []),
         transforms.DefaultTransforms(),
         # transforms.RemapLabels(label_to_id)
     ]
@@ -62,9 +63,9 @@ def get_train_transforms(args, mine_id):
 def get_test_transforms():
     label_to_id = label_mapper()
     tgt_transforms = [
-        transforms.Resize((1024, 512)), 
+        transforms.Resize((1024, 512)),
         transforms.DefaultTransforms(),
-        transforms.RemapLabels(label_to_id)
+        transforms.RemapLabels(label_to_id),
     ]
     return transforms.Compose(tgt_transforms)
 
@@ -74,6 +75,6 @@ def get_val_transforms(args):
     tgt_transforms = [
         transforms.Resize((1024, 512)),
         transforms.DefaultTransforms(),
-        # transforms.RemapLabels(label_to_id)  ## Getting rid of this because NTHU has no labels for train set. 
+        # transforms.RemapLabels(label_to_id)  ## Getting rid of this because NTHU has no labels for train set.
     ]
     return transforms.Compose(tgt_transforms)
