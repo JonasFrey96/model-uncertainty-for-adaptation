@@ -6,3 +6,4 @@
 # SPDX-License-Identifier: MIT
 
 from .deeplab_multi import DeeplabMulti
+from .fastscnn_noisy import *

@@ -18,19 +18,24 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from datasets import (CityscapesDataset, CrossCityDataset, get_test_transforms,
-                      get_train_transforms)
+                      get_train_transforms, ScanNetAdapter)
 from generate_pseudo_labels import validate_model
 from network import DeeplabMulti as DeepLab
 from network import JointSegAuxDecoderModel, NoisyDecoders
+from network.models import FastSCNNNoisyDecoders, FastSCNNJointSegAuxDecoderModel 
 from utils import (ScoreUpdater, adjust_learning_rate, cleanup,
                    get_arguments, label_selection, parse_split_list,
                    savelst_tgt, seed_torch, self_training_regularized_infomax,
                    self_training_regularized_infomax_cct, set_logger)
 
+from ucdr.models import FastSCNN
+from ucdr.utils import TorchSemanticsMeter
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 osp = os.path
 
-
+SCANNET = True
+SCANNET_DIR = "/media/Data/Datasets/scannet"
+SCANNET_SCENE = "scene0004"
 args = get_arguments()
 if not os.path.exists(args.save):
     os.makedirs(args.save)
@@ -49,26 +54,63 @@ def make_network(args):
         model = JointSegAuxDecoderModel(model, aux_decoders)
     return model
 
+def make_scannet_network(args):
+    fastscnn = FastSCNN(num_classes=40, extract=True, extract_layer="fusion")
+    p = "/home/jonfrey/git/ASL/results/learning/scannet25k_24h_lr_decay_from_scratch/2021-06-05T14:36:26_scannet25k_24h_lr_decay_from_scratch/task0-epoch=64--step=158340.ckpt"
+    if os.path.isfile(p):
+        res = torch.load(p, map_location=lambda storage, loc: storage)
+        new_statedict = {}
+        for k in res["state_dict"].keys():
+            if k.find("model.") != -1:
+                new_statedict[k[6:]] = res["state_dict"][k]
+        res = fastscnn.load_state_dict(new_statedict, strict=True)
+    else:
+        raise Exception()
+    
+    fastscnn.extract = True
+    aux_decoders = FastSCNNNoisyDecoders(n_decoders=args.decoders, dropout=args.dropout, num_classes=40)
+    model = FastSCNNJointSegAuxDecoderModel(fastscnn, aux_decoders)
+    return model
 
 def test(model, round_idx):
-    transforms = get_test_transforms()
-    
-    ds = CrossCityDataset(root=args.data_tgt_dir, list_path=args.data_tgt_test_list.format(args.city), transforms=transforms)
+    if SCANNET:
+        ds = ScanNetAdapter(
+                root=SCANNET_DIR,
+                mode="val",
+                scenes=[SCANNET_SCENE],
+                output_trafo=[],
+                output_size=(320, 640),
+                degrees=0,
+                data_augmentation=False,
+                flip_p=0,
+                jitter_bcsh=[0, 0, 0, 0]
+        )
+        num_classes = 40
+    else:
+        num_classes = 13
+        transforms = get_test_transforms()
+        ds = CrossCityDataset(root=args.data_tgt_dir, list_path=args.data_tgt_test_list.format(args.city), transforms=transforms)
     loader = torch.utils.data.DataLoader(ds, batch_size=6, pin_memory=torch.cuda.is_available(), num_workers=6)
-
-    scorer = ScoreUpdater(13, len(loader))
+    
+    meter = TorchSemanticsMeter(num_classes)
+    meter = meter.to(device)
+    scorer = ScoreUpdater(num_classes, len(loader))
     logger.info('###### Start evaluating in target domain test set in round {}! ######'.format(round_idx))
     start_eval = time.time()
     model.eval()
     with torch.no_grad():
-        for batch in loader:
+        for j, batch in enumerate(loader):
             img, label, _ = batch
-            pred = model(img.to(device)).argmax(1).cpu()
-            scorer.update(pred.view(-1), label.view(-1))
+            pred = model(img.to(device)).argmax(1)
+            meter.update(pred.to(device), label.to(device))
+            pred = pred.cpu()
+            label = label.cpu()
+            print(j, "/", len(loader))
     model.train()
     logger.info('###### Finish evaluating in target domain test set in round {}! Time cost: {:.2f} seconds. ######'.format(
         round_idx, time.time()-start_eval))
-
+    
+    print(meter)
 
 def train(mix_trainloader, model, interp, optimizer, args):
     """Create the model and start the training."""
@@ -118,7 +160,12 @@ def main():
     tgt_portion = args.init_tgt_port
     image_tgt_list, image_name_tgt_list, _, _ = parse_split_list(args.data_tgt_train_list.format(args.city))
 
-    model = make_network(args).to(device)
+    if SCANNET:
+        model = make_scannet_network(args).to(device)
+        args.num_classes = 40
+    else:
+        model = make_network(args).to(device)
+    
     test(model, -1)
     for round_idx in range(args.num_rounds):
         save_round_eval_path = osp.join(args.save, str(round_idx))
@@ -132,7 +179,7 @@ def main():
         ########## pseudo-label generation
         conf_dict, pred_cls_num, save_prob_path, save_pred_path = validate_model(model,
                                                                                  save_round_eval_path,
-                                                                                 round_idx, args)
+                                                                                 round_idx, args, SCANNET, SCANNET_DIR, SCANNET_SCENE)
         cls_thresh = label_selection.kc_parameters(
             conf_dict, pred_cls_num, tgt_portion, round_idx, save_stats_path, args)
 
@@ -147,15 +194,28 @@ def main():
         # mine_chance = args.mine_chance
 
         src_transforms, tgt_transforms = get_train_transforms(args, mine_id)
-        srcds = CityscapesDataset(transforms=src_transforms)
-
-        tgtds = CrossCityDataset(args.data_tgt_dir.format(args.city), tgt_train_lst,
-                                  pseudo_root=save_pseudo_label_path, transforms=tgt_transforms)
         
-        if args.no_src_data:
-            mixtrainset = tgtds
+        if SCANNET:
+            mixtrainset = ScanNetAdapter(
+                root=SCANNET_DIR,
+                mode="train",
+                scenes=[SCANNET_SCENE],
+                output_trafo=[],
+                output_size=(320, 640),
+                degrees=10,
+                data_augmentation=True,
+                flip_p=0.5,
+                jitter_bcsh=[0.3, 0.3, 0.3, 0.05]
+            )
         else:
-            mixtrainset = torch.utils.data.ConcatDataset([srcds, tgtds])
+            srcds = CityscapesDataset(transforms=src_transforms)
+            tgtds = CrossCityDataset(args.data_tgt_dir.format(args.city), tgt_train_lst,
+                                    pseudo_root=save_pseudo_label_path, transforms=tgt_transforms)
+            if args.no_src_data:
+                mixtrainset = tgtds
+            else:
+                mixtrainset = torch.utils.data.ConcatDataset([srcds, tgtds])
+
 
         mix_loader = DataLoader(mixtrainset, batch_size=args.batch_size, shuffle=True,
                                 num_workers=args.batch_size, pin_memory=torch.cuda.is_available())
