@@ -13,7 +13,7 @@ IGNORE_LABEL = 255
 
 
 def loss_calc(pred, label):
-    #Basic CE loss
+    # Basic CE loss
     return F.cross_entropy(pred, label.long(), ignore_index=IGNORE_LABEL)
 
 
@@ -37,17 +37,15 @@ def self_training_regularized_infomax(pred, label, args):
     proba = pred.softmax(1)
     n, c, h, w = pred.size()
 
-    
-    #entropy_loss
-    entropy = -(proba * torch.log2(proba + 1e-10)).sum() / \
-        (n * h * w * torch.log2(torch.tensor(c, dtype=torch.float)))
+    # entropy_loss
+    entropy = -(proba * torch.log2(proba + 1e-10)).sum() / (n * h * w * torch.log2(torch.tensor(c, dtype=torch.float)))
 
-    #diversity loss
+    # diversity loss
     proba = proba.mean(dim=(0, 2, 3))
     diverse = (proba * torch.log2(proba + 1e-10)).sum()
 
     # if args.kl_prior_variant == 'uniform':
-        ## this is uniform prior
+    ## this is uniform prior
     prior = torch.ones_like(proba).to(proba.device)
     # elif args.kl_prior_variant == 'cs':
     #     ##this is CS Prior
@@ -62,10 +60,9 @@ def self_training_regularized_infomax(pred, label, args):
     # elif args.kl_prior_variant == 'synthia':
     #     prior = 16 * torch.Tensor([0.2021, 0.1966, 0.2999, 0.0030, 0.0029, 0.0103, 0.0004, 0.0010, 0.1051,
     #                                0.0706, 0.0430, 0.0045, 0.0407, 0.0157, 0.0020, 0.0021]).to(proba.device)
-    diverse = torch.nn.KLDivLoss(reduction='sum')(prior.log(), proba) * 1.442695
-    
+    diverse = torch.nn.KLDivLoss(reduction="sum")(prior.log(), proba) * 1.442695
+
     return args.lambda_ce * ce_loss + args.lambda_ent * entropy + args.lambda_div * diverse
-    
 
 
 def self_training_regularized_infomax_rotation_pred(pred, pseudo_label, ssl_pred, ssl_label, args):
@@ -81,17 +78,36 @@ class SelfTrainingCrossEntropy(torch.nn.Module):
         super().__init__()
         self.threshold = threshold
         self.ignore_index = ignore_index
-        self.loss_scale = torch.tensor([0.99471986, 0.719607, 0.9954222, 0.70447516, 0.69144464,
-                                        0.9373348, 0.9491925, 0.8737855, 0.9876312, 0.8852682,
-                                        0.9995382, 0.96368825, 0.76953304, 0.9972165, 0.9109088,
-                                        0.885779, 0.64849615, 0.884135, 0.76383626]).cuda()
+        self.loss_scale = torch.tensor(
+            [
+                0.99471986,
+                0.719607,
+                0.9954222,
+                0.70447516,
+                0.69144464,
+                0.9373348,
+                0.9491925,
+                0.8737855,
+                0.9876312,
+                0.8852682,
+                0.9995382,
+                0.96368825,
+                0.76953304,
+                0.9972165,
+                0.9109088,
+                0.885779,
+                0.64849615,
+                0.884135,
+                0.76383626,
+            ]
+        ).cuda()
 
     def forward(self, pred, target=None):
-        pred = F.interpolate(pred, size=target.shape[1:], mode='bilinear', align_corners=True)
-        
+        pred = F.interpolate(pred, size=target.shape[1:], mode="bilinear", align_corners=True)
+
         proba = pred.softmax(1) / self.loss_scale[None, :, None, None]
         prob, target = proba.max(1)
-        
+
         mask = prob < self.threshold
         target[mask] = self.ignore_index
         n_classes = pred.size(1)
@@ -100,13 +116,11 @@ class SelfTrainingCrossEntropy(torch.nn.Module):
         return F.cross_entropy(pred, target, ignore_index=self.ignore_index)
 
 
-
 def reg_loss_calc_expand(pred, label, reg_weights, args):
     ce_loss = F.cross_entropy(pred, label.long(), ignore_index=IGNORE_LABEL)
 
     mask = label != IGNORE_LABEL
-    kld = (-pred.log_softmax(1).mean(1) *
-           mask.float()).sum((1, 2)) / (mask.sum((1, 2)).float() + 1)
+    kld = (-pred.log_softmax(1).mean(1) * mask.float()).sum((1, 2)) / (mask.sum((1, 2)).float() + 1)
     kld = (kld * reg_weights.float()).mean()
 
     return ce_loss + (args.mr_weight_kld * kld)
@@ -120,14 +134,14 @@ def softmax_mse_loss(inputs, targets, conf_mask=False, threshold=None, use_softm
         targets = F.softmax(targets, dim=1)
 
     if conf_mask:
-        loss_mat = F.mse_loss(inputs, targets, reduction='none')
-        mask = (targets.max(1)[0] > threshold)
+        loss_mat = F.mse_loss(inputs, targets, reduction="none")
+        mask = targets.max(1)[0] > threshold
         loss_mat = loss_mat[mask.unsqueeze(1).expand_as(loss_mat)]
         if loss_mat.shape.numel() == 0:
-            loss_mat = torch.Tensor([0.]).to(inputs.device)
+            loss_mat = torch.Tensor([0.0]).to(inputs.device)
         return loss_mat.mean()
     else:
-        return F.mse_loss(inputs, targets, reduction='mean')
+        return F.mse_loss(inputs, targets, reduction="mean")
 
 
 def softmax_kl_loss(inputs, targets, conf_mask=False, threshold=None, use_softmax=False):
@@ -137,8 +151,8 @@ def softmax_kl_loss(inputs, targets, conf_mask=False, threshold=None, use_softma
     if use_softmax:
         targets = targets.log_softmax(dim=1)
 
-    return F.kl_div(targets, inputs)  ## I'm using reverse KL. 
-    
+    return F.kl_div(targets, inputs)  ## I'm using reverse KL.
+
 
 def self_training_regularized_infomax_cct(pred, pseudo_label, aux_pred, args):
     main_part_loss = self_training_regularized_infomax(pred, pseudo_label, args)

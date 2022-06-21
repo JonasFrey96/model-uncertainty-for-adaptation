@@ -21,10 +21,10 @@ def np_print_options(*args, **kwargs):
 
 
 def set_logger(output_dir=None, log_file=None, debug=False):
-    head = '%(asctime)-15s Host %(message)s'
+    head = "%(asctime)-15s Host %(message)s"
     logger_level = logging.INFO if not debug else logging.DEBUG
     if all((output_dir, log_file)) and len(log_file) > 0:
-        logger = logging.getLogger('crosscityadap')
+        logger = logging.getLogger("crosscityadap")
         log_path = osp.join(output_dir, log_file)
         handler = logging.FileHandler(log_path)
         formatter = logging.Formatter(head)
@@ -36,5 +36,5 @@ def set_logger(output_dir=None, log_file=None, debug=False):
         logger.setLevel(logger_level)
     else:
         logging.basicConfig(level=logger_level, format=head)
-        logger = logging.getLogger('crosscityadap')
+        logger = logging.getLogger("crosscityadap")
     return logger

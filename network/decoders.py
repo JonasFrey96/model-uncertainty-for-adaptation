@@ -40,14 +40,14 @@ class JointSegAuxDecoderModel(nn.Module):
         perturbed_out = self.aux_decoders(features)
         input_size = x.size()[2:]
         perturbed_out = [self.interp(x, input_size) for x in perturbed_out]
-    
+
         return seg_pred, perturbed_out
 
     def optim_parameters(self, args):
         return self.seg_model.optim_parameters(args) + self.aux_decoders.optim_parameters(args)
 
     def interp(self, x1, input_size):
-        return F.interpolate(x1, size=input_size, mode='bilinear', align_corners=True)
+        return F.interpolate(x1, size=input_size, mode="bilinear", align_corners=True)
 
 
 class NoisyDecoders(nn.Module):
@@ -59,4 +59,4 @@ class NoisyDecoders(nn.Module):
         return [decoder(x) for decoder in self.decoders]
 
     def optim_parameters(self, args):
-        return [{'params': self.parameters(), 'lr': 10 * args.learning_rate}]
+        return [{"params": self.parameters(), "lr": 10 * args.learning_rate}]

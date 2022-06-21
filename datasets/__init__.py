@@ -6,9 +6,7 @@
 # SPDX-License-Identifier: MIT
 
 from . import transforms
-from .datasets import (CityscapesDataset, CrossCityDataset,
-                           DownsampleDataset)
-from .transform_presets import (get_test_transforms, get_train_transforms,
-                                get_val_transforms)
+from .datasets import CityscapesDataset, CrossCityDataset, DownsampleDataset
+from .transform_presets import get_test_transforms, get_train_transforms, get_val_transforms
 
-from .scannet_adapter import ScanNetAdapter 
+from .scannet_adapter import ScanNetAdapter

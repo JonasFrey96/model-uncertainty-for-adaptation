@@ -19,8 +19,6 @@
                 "--lambda-ent=1",
                 "--save=/home/jonfrey/git/model-uncertainty-for-adaptation/results",
                 "--lambda-ssl=0.1",
-                "--learning-rate=0.000005",
-                "--debug",
             ]
         },
     ]

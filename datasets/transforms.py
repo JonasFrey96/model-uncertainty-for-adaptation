@@ -32,7 +32,7 @@ class Normalize:
         std (tuple): standard deviations for each channel.
     """
 
-    def __init__(self, mean=(0., 0., 0.), std=(1., 1., 1.)):
+    def __init__(self, mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0)):
         self.mean = mean[:, None, None]
         self.std = std[:, None, None]
 
@@ -54,8 +54,8 @@ class ToTensor:
 
 class SetSeed:
     def __call__(self, sample):
-        if 'seed' in sample:
-            random.seed(sample['seed'])
+        if "seed" in sample:
+            random.seed(sample["seed"])
         return sample
 
 
@@ -117,7 +117,7 @@ class RandomScaleCrop:
         padw = self.crop_size[0] - ow if ow < self.crop_size[0] else 0
         img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
         mask = ImageOps.expand(mask, border=(0, 0, padw, padh), fill=self.fill)
-        
+
         rare_label_present = np.intersect1d(np.array(mask), self.rare_ids)
         if (rare_label_present.size > 0) and random.random() < self.mine_prob:
             chosen_rand_id = np.random.choice(rare_label_present)
@@ -129,13 +129,12 @@ class RandomScaleCrop:
             print(center)
         else:
             center = None
-        
+
         return self.random_crop(img, mask, crop_center=center)
-        
-    
+
     def random_crop(self, img, mask, crop_center=None):
         w, h = img.size
-        
+
         # random crop crop_size
         if crop_center is None:
             ## basically select the mid point (first time below) in (crop_size to  w-cropsize).
@@ -148,7 +147,7 @@ class RandomScaleCrop:
         else:
             x1 = crop_center[0] - self.crop_size[0] // 2
             y1 = crop_center[1] - self.crop_size[1] // 2
-    
+
             img = img.crop((x1, y1, x1 + self.crop_size[0], y1 + self.crop_size[1]))
             mask = mask.crop((x1, y1, x1 + self.crop_size[0], y1 + self.crop_size[1]))
 
@@ -163,13 +162,12 @@ class CustomTranslate:
     def __call__(self, img1):
         translations = []
         for translate in self.translations:
-            im_tr = TF.affine(img1, translate=translate, angle=0,
-                              scale=1, shear=0, fillcolor=self.fill)
+            im_tr = TF.affine(img1, translate=translate, angle=0, scale=1, shear=0, fillcolor=self.fill)
             translations.append(im_tr)
         return translations
 
 
-class DefaultTransforms: 
+class DefaultTransforms:
     def __call__(self, sample):
         IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
         image, label = sample
@@ -188,7 +186,7 @@ class RemapLabels:
 
     def __call__(self, sample):
         if isinstance(self.label_map, dict):
-            return sample[0], np.vectorize(self.label_map.get)(sample[1])  #.astype(np.int64)
+            return sample[0], np.vectorize(self.label_map.get)(sample[1])  # .astype(np.int64)
 
         if torch.is_tensor(sample[1]):
             remapped = self.label_map[sample[1].int().numpy()]
@@ -203,11 +201,9 @@ class OnehotLabels:
     def __call__(self, sample):
         img, label = sample
         l_shape = label.shape
-        
+
         y = label.ravel()
         y_one_hot = np.zeros((y.shape[0], self.n_classes))
         y_one_hot[np.arange(y.shape[0], y)] = 1
 
-        return img, y_one_hot.reshape(l_shape + (self.n_classes, )).transpose(2, 0, 1)
-
-
+        return img, y_one_hot.reshape(l_shape + (self.n_classes,)).transpose(2, 0, 1)

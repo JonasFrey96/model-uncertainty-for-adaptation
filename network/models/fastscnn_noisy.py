@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ucdr.models import FastSCNN,  Classifer
+from ucdr.models import FastSCNN, Classifer
 
-__all__ = [ "FastSCNNNoisyDecoders", "FastSCNNJointSegAuxDecoderModel"]
+__all__ = ["FastSCNNNoisyDecoders", "FastSCNNJointSegAuxDecoderModel"]
 
 
 class FastSCNNDropOutDecoder(nn.Module):
@@ -12,7 +12,7 @@ class FastSCNNDropOutDecoder(nn.Module):
         self.dropout = nn.Dropout2d(p=drop_rate)
         self.decoder = Classifer(128, num_classes) if decoder is None else decoder
 
-    def forward(self, x, size=(640,320), *ig, **ign):
+    def forward(self, x, size=(640, 320), *ig, **ign):
         x = self.dropout(x)
         x = self.decoder(x)  # BS,40,48,48
         x = F.interpolate(x, size, mode="bilinear", align_corners=True)
@@ -82,6 +82,7 @@ class FastSCNNJointSegAuxDecoderModel(nn.Module):
                 {"params": get_1x_lr_params_NOscale(fastscnn), "lr": args.learning_rate},
                 {"params": get_10x_lr_params(fastscnn), "lr": 10 * args.learning_rate},
             ]
+
         return optim_parameters(self.fastscnn, args) + self.aux_decoders.optim_parameters(args)
 
     def interp(self, x1, input_size):

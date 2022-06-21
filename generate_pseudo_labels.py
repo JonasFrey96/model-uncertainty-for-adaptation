@@ -20,40 +20,41 @@ from datasets import CrossCityDataset, get_val_transforms, ScanNetAdapter
 from utils import ScoreUpdater, colorize_mask
 from ucdr.utils import TorchSemanticsMeter
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 osp = os.path
 
 
 def validate_model(model, save_round_eval_path, round_idx, args, SCANNET, SCANNET_DIR, SCANNET_SCENE):
-    logger = logging.getLogger('crosscityadap')
+    logger = logging.getLogger("crosscityadap")
     ## Doubles as a pseudo label generator
 
     if SCANNET:
         dataset = ScanNetAdapter(
-                root=SCANNET_DIR,
-                mode="train",
-                scenes=[SCANNET_SCENE],
-                output_trafo=[],
-                output_size=(320, 640),
-                degrees=0,
-                data_augmentation=False,
-                flip_p=0,
-                jitter_bcsh=[0, 0, 0, 0]
+            root=SCANNET_DIR,
+            mode="train",
+            scenes=[SCANNET_SCENE],
+            output_trafo=[],
+            output_size=(320, 640),
+            degrees=0,
+            data_augmentation=False,
+            flip_p=0,
+            jitter_bcsh=[0, 0, 0, 0],
         )
     else:
         val_transforms = get_val_transforms(args)
-        dataset = CrossCityDataset(args.data_tgt_dir,
-                                args.data_tgt_train_list.format(args.city), transforms=val_transforms)
-        
+        dataset = CrossCityDataset(
+            args.data_tgt_dir, args.data_tgt_train_list.format(args.city), transforms=val_transforms
+        )
+
     loader = DataLoader(dataset, batch_size=12, num_workers=4, pin_memory=torch.cuda.is_available())
 
     scorer = ScoreUpdater(args.num_classes, len(loader))
     meter = TorchSemanticsMeter(args.num_classes)
     meter.to(device)
-    
-    save_pred_vis_path = osp.join(save_round_eval_path, 'pred_vis')
-    save_prob_path = osp.join(save_round_eval_path, 'prob')
-    save_pred_path = osp.join(save_round_eval_path, 'pred')
+
+    save_pred_vis_path = osp.join(save_round_eval_path, "pred_vis")
+    save_prob_path = osp.join(save_round_eval_path, "prob")
+    save_pred_path = osp.join(save_round_eval_path, "pred")
     if not os.path.exists(save_pred_vis_path):
         os.makedirs(save_pred_vis_path)
     if not os.path.exists(save_prob_path):
@@ -64,7 +65,7 @@ def validate_model(model, save_round_eval_path, round_idx, args, SCANNET, SCANNE
     conf_dict = {k: [] for k in range(args.num_classes)}
     pred_cls_num = np.zeros(args.num_classes)
     ## evaluation process
-    logger.info('###### Start evaluating target domain train set in round {}! ######'.format(round_idx))
+    logger.info("###### Start evaluating target domain train set in round {}! ######".format(round_idx))
     start_eval = time.time()
     model.eval()
     with torch.no_grad():
@@ -79,31 +80,36 @@ def validate_model(model, save_round_eval_path, round_idx, args, SCANNET, SCANNE
 
             # image = image.cpu()
             pred_prob, pred_labels = output.max(1)
-            
+
             # scorer.update(pred_labels.view(-1), label.view(-1))
-            meter.update( pred_labels.to(device), label.to(device) )
+            meter.update(pred_labels.to(device), label.to(device))
 
             for b_ind in range(image.size(0)):
-                image_name = name[b_ind].split('/')[-1].split('.')[0]
+                image_name = name[b_ind].split("/")[-1].split(".")[0]
 
-                np.save('%s/%s.npy' % (save_prob_path, image_name), output[b_ind].numpy().transpose(1, 2, 0))
+                np.save("%s/%s.npy" % (save_prob_path, image_name), output[b_ind].numpy().transpose(1, 2, 0))
                 if args.debug:
                     colorize_mask(pred_labels[b_ind].numpy().astype(np.uint8)).save(
-                        '%s/%s_color.png' % (save_pred_vis_path, image_name))
+                        "%s/%s_color.png" % (save_pred_vis_path, image_name)
+                    )
                 Image.fromarray(pred_labels[b_ind].numpy().astype(np.uint8)).save(
-                    '%s/%s.png' % (save_pred_path, image_name))
+                    "%s/%s.png" % (save_pred_path, image_name)
+                )
 
-            if args.kc_value == 'conf':
+            if args.kc_value == "conf":
                 for idx_cls in range(args.num_classes):
                     idx_temp = pred_labels == idx_cls
                     pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + idx_temp.sum()
                     if idx_temp.any():
-                        conf_cls_temp = pred_prob[idx_temp].numpy().astype(np.float32)[::args.ds_rate]
+                        conf_cls_temp = pred_prob[idx_temp].numpy().astype(np.float32)[:: args.ds_rate]
                         conf_dict[idx_cls].extend(conf_cls_temp)
     print(meter)
-    
+
     model.train()
-    logger.info('###### Finish evaluating target domain train set in round {}! Time cost: {:.2f} seconds. ######'.format(
-        round_idx, time.time() - start_eval))
+    logger.info(
+        "###### Finish evaluating target domain train set in round {}! Time cost: {:.2f} seconds. ######".format(
+            round_idx, time.time() - start_eval
+        )
+    )
     logger.info("Meter measure pseudo: ", meter.measure())
     return conf_dict, pred_cls_num, save_prob_path, save_pred_path

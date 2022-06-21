@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 
-logger = logging.getLogger('crosscityadap')
+logger = logging.getLogger("crosscityadap")
 
 
 class ScoreUpdater(object):
@@ -52,14 +52,14 @@ class ScoreUpdater(object):
         ious = np.nan_to_num(self._per_cls_iou.cpu().numpy())
         i = self.i
         if i is not None:
-            speed = 1. * self._computed.sum() / (time.time() - self._start)
-            logger.info('\nDone {}/{} with speed: {:.2f}/s'.format(i + 1, x_num, speed))
+            speed = 1.0 * self._computed.sum() / (time.time() - self._start)
+            logger.info("\nDone {}/{} with speed: {:.2f}/s".format(i + 1, x_num, speed))
             # print('\nDone {}/{} with speed: {:.2f}/s'.format(i + 1, x_num, speed))
-        name = ''
-        logger.info('{}mean iou: {:.2f}%'.format(name, np.mean(ious) * 100))
-        print('{}mean iou: {:.2f}%'.format(name, np.mean(ious) * 100))
+        name = ""
+        logger.info("{}mean iou: {:.2f}%".format(name, np.mean(ious) * 100))
+        print("{}mean iou: {:.2f}%".format(name, np.mean(ious) * 100))
         with np.printoptions(precision=2, suppress=True):
-            logger.info('{}'.format(ious * 100))
-            print('{}'.format(ious * 100))
+            logger.info("{}".format(ious * 100))
+            print("{}".format(ious * 100))
 
         return ious
