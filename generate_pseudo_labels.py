@@ -31,7 +31,7 @@ def validate_model(model, save_round_eval_path, round_idx, args, SCANNET, SCANNE
     if SCANNET:
         dataset = ScanNetAdapter(
                 root=SCANNET_DIR,
-                mode="val",
+                mode="train",
                 scenes=[SCANNET_SCENE],
                 output_trafo=[],
                 output_size=(320, 640),

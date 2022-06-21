@@ -16,7 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
 from datasets import (CityscapesDataset, CrossCityDataset, get_test_transforms,
                       get_train_transforms, ScanNetAdapter)
 from generate_pseudo_labels import validate_model
@@ -27,15 +26,17 @@ from utils import (ScoreUpdater, adjust_learning_rate, cleanup,
                    get_arguments, label_selection, parse_split_list,
                    savelst_tgt, seed_torch, self_training_regularized_infomax,
                    self_training_regularized_infomax_cct, set_logger)
-
 from ucdr.models import FastSCNN
 from ucdr.utils import TorchSemanticsMeter
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 osp = os.path
 
 SCANNET = True
 SCANNET_DIR = "/media/Data/Datasets/scannet"
 SCANNET_SCENE = "scene0004"
+
+
 args = get_arguments()
 if not os.path.exists(args.save):
     os.makedirs(args.save)
@@ -187,7 +188,8 @@ def main():
                                         save_pseudo_label_path, save_pseudo_label_color_path, save_round_eval_path, args)
 
         tgt_portion = min(tgt_portion + args.tgt_port_step, args.max_tgt_port)
-        tgt_train_lst = savelst_tgt(image_tgt_list, image_name_tgt_list, save_lst_path, save_pseudo_label_path)
+        # ONLY used for not SCANNET
+        savelst_tgt(image_tgt_list, image_name_tgt_list, save_lst_path, save_pseudo_label_path)
 
         rare_id = np.load(save_stats_path + '/rare_id_round' + str(round_idx) + '.npy')
         mine_id = np.load(save_stats_path + '/mine_id_round' + str(round_idx) + '.npy')
@@ -202,10 +204,12 @@ def main():
                 scenes=[SCANNET_SCENE],
                 output_trafo=[],
                 output_size=(320, 640),
-                degrees=10,
-                data_augmentation=True,
-                flip_p=0.5,
-                jitter_bcsh=[0.3, 0.3, 0.3, 0.05]
+                degrees=0,
+                data_augmentation=False,
+                flip_p=0,
+                jitter_bcsh=[0,0,0,0],
+                pseudo_root=save_pseudo_label_path,
+                transforms = tgt_transforms
             )
         else:
             srcds = CityscapesDataset(transforms=src_transforms)
@@ -218,7 +222,7 @@ def main():
 
 
         mix_loader = DataLoader(mixtrainset, batch_size=args.batch_size, shuffle=True,
-                                num_workers=args.batch_size, pin_memory=torch.cuda.is_available())
+                                num_workers=args.batch_size, pin_memory=torch.cuda.is_available(), drop_last=True)
         src_portion = min(src_portion + args.src_port_step, args.max_src_port)
         optimizer = optim.SGD(model.optim_parameters(args), lr=args.learning_rate,
                               momentum=args.momentum, weight_decay=args.weight_decay)
